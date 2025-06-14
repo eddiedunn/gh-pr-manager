@@ -45,27 +45,12 @@ class RepoSelector(Static):
             self.query_one("#cancel").display = False
 
 
-class BranchList(Static):
-    def __init__(self, repo: str, on_back):
+class BranchSelector(Static):
+    def __init__(self, repo: str, branches: list[str], on_back):
         super().__init__(id="branch_list")
         self.repo = repo
+        self.branches = branches
         self.on_back = on_back
-        self.branches: list[str] = []
-
-    def on_mount(self) -> None:
-        self.refresh_branches()
-
-    def refresh_branches(self) -> None:
-        try:
-            result = subprocess.run(
-                ["git", "-C", self.repo, "branch", "--format=%(refname:short)"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            self.branches = [b.strip() for b in result.stdout.splitlines()]
-        except subprocess.CalledProcessError:
-            self.branches = []
 
     def compose(self) -> ComposeResult:
         yield Static(f"Branches for {Path(self.repo).name}:")
@@ -103,11 +88,23 @@ class PRManagerApp(App):
         container = self.query_one("#main_container")
         selector = container.query_one(RepoSelector)
         self.call_after_refresh(selector.remove)
-        container.mount(BranchList(repo, self.show_repo_selector))
+
+        try:
+            result = subprocess.run(
+                ["git", "-C", repo, "branch", "--format=%(refname:short)"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            branches = [b.strip() for b in result.stdout.splitlines()]
+        except subprocess.CalledProcessError:
+            branches = []
+
+        container.mount(BranchSelector(repo, branches, self.show_repo_selector))
 
     def show_repo_selector(self) -> None:
         container = self.query_one("#main_container")
-        branch_list = container.query_one(BranchList)
+        branch_list = container.query_one(BranchSelector)
         self.call_after_refresh(branch_list.remove)
         container.mount(RepoSelector(self.repositories, self.on_repo_selected))
 

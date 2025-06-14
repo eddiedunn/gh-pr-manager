@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from gh_pr_manager import main
-from gh_pr_manager.main import PRManagerApp, BranchList
+from gh_pr_manager.main import PRManagerApp, BranchSelector
 
 @pytest.mark.asyncio
 async def test_app_runs():
@@ -35,4 +35,4 @@ async def test_select_repo_shows_branches(tmp_path, monkeypatch):
         await pilot.click("#continue")
         await pilot.click("#confirm")
         await pilot.pause()
-        assert pilot.app.query_one(BranchList)
+        assert pilot.app.query_one(BranchSelector)
