@@ -18,6 +18,11 @@ A text-based user interface (TUI) Python app for managing GitHub branches and pu
 pip install -r requirements.txt
 ```
 
+Authenticate the GitHub CLI before running the app:
+```bash
+gh auth login
+```
+
 ## Run
 ```bash
 python main.py
@@ -25,7 +30,7 @@ python main.py
 
 ## Repository and Branch Workflow (Updated)
 
-1. Launch the app and connect your GitHub account (via OAuth or personal access token).
+1. Launch the app and connect your GitHub account with `gh auth login`.
 2. Select a GitHub organization or your personal account to browse repositories.
 3. Search and select a single repository from the list.
 4. The TUI displays the branches for the selected repository.
@@ -36,7 +41,7 @@ python main.py
 ## Configuration
 The selected repository is stored in `config.json` at the project root as the canonical GitHub repository name (e.g., `org/repo`).
 
-- On first launch, you will be prompted to connect your GitHub account.
+- On first launch, you will be prompted to authenticate using `gh auth login`.
 - You can update your selected repository at any time via the TUI.
 - The app no longer tracks local repository paths; all actions are performed via the GitHub API and the `gh` CLI.
 

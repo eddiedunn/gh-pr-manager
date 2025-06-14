@@ -8,6 +8,7 @@ from pathlib import Path
 from gh_pr_manager import main
 from gh_pr_manager.main import PRManagerApp, BranchSelector
 from gh_pr_manager import utils
+from gh_pr_manager import github_client
 
 @pytest.mark.asyncio
 async def test_app_runs():
@@ -15,6 +16,15 @@ async def test_app_runs():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert pilot.app is not None
+
+
+@pytest.mark.asyncio
+async def test_auth_screen_shown_when_not_logged_in(monkeypatch):
+    monkeypatch.setattr(github_client, "check_auth_status", lambda: False)
+    app = PRManagerApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert pilot.app.query_one("#auth_msg")
 
 
 @pytest.mark.asyncio
@@ -32,9 +42,7 @@ async def test_select_repo_shows_branches(tmp_path, monkeypatch):
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.query_one("#repo_select").value = str(repo)
-        await pilot.click("#continue")
-        await pilot.click("#confirm")
+        pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
         assert pilot.app.query_one(BranchSelector)
 
@@ -71,9 +79,7 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.query_one("#repo_select").value = str(repo)
-        await pilot.click("#continue")
-        await pilot.click("#confirm")
+        pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
         pilot.app.query_one("#branch_select").value = "feature"
         await pilot.click("#delete_branch")
