@@ -61,12 +61,15 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
     conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
+    repo_clone = Path.home() / ".cache" / "gh_pr_manager" / str(repo)
     calls = []
 
     def fake_run_cmd(cmd, cwd=None):
         calls.append(cmd)
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "--format=%(refname:short)" in cmd:
-            return True, "main\nfeature\n"
+        if cmd[:4] == ["git", "-C", str(repo_clone), "fetch"]:
+            return True, ""
+        if cmd[:4] == ["git", "-C", str(repo_clone), "for-each-ref"]:
+            return True, "origin/main\norigin/feature\n"
         return True, ""
 
     monkeypatch.setattr(utils, "run_cmd", fake_run_cmd)
@@ -83,7 +86,15 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
         await pilot.click("#delete_branch")
         await pilot.pause()
 
-    assert ["git", "-C", str(repo), "branch", "-D", "feature"] in calls
+    assert [
+        "git",
+        "-C",
+        str(repo_clone),
+        "push",
+        "origin",
+        "--delete",
+        "feature",
+    ] in calls
 
 
 @pytest.mark.skip("repo editing removed")

@@ -113,14 +113,17 @@ class BranchActions(Static):
             return
 
         if event.button.id == "delete_branch":
-            success, output = run_cmd([
-                "git",
-                "-C",
-                self.repo,
-                "branch",
-                "-D",
-                branch,
-            ])
+            success, output = run_cmd(
+                [
+                    "git",
+                    "-C",
+                    self.repo,
+                    "push",
+                    "origin",
+                    "--delete",
+                    branch,
+                ]
+            )
             if success:
                 msg.update(f"Deleted {branch}")
             else:
@@ -183,11 +186,24 @@ class BranchSelector(Static):
             self.on_back()
 
     def refresh_branches(self) -> None:
+        run_cmd(["git", "-C", self.repo, "fetch", "--prune"])
         success, output = run_cmd(
-            ["git", "-C", self.repo, "branch", "--format=%(refname:short)"]
+            [
+                "git",
+                "-C",
+                self.repo,
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/remotes/origin/",
+            ]
         )
         if success:
-            self.branches = [b.strip() for b in output.splitlines()]
+            lines = [l.strip() for l in output.splitlines()]
+            self.branches = [
+                l.replace("origin/", "", 1)
+                for l in lines
+                if l and not l.startswith("origin/HEAD")
+            ]
         else:
             self.branches = []
         select = self.query_one("#branch_select")
@@ -236,19 +252,43 @@ class PRManagerApp(App):
         # Persist selection
         with open(CONFIG_PATH, "w") as f:
             json.dump({"selected_repository": repo}, f)
+
         container = self.query_one("#main_container")
         selector = container.query_one(RepoSelectionWidget)
         self.call_after_refresh(selector.remove)
 
+        clone_base = Path.home() / ".cache" / "gh_pr_manager"
+        repo_path = clone_base / repo
+        if not repo_path.exists():
+            repo_path.parent.mkdir(parents=True, exist_ok=True)
+            run_cmd(["gh", "repo", "clone", repo, str(repo_path)])
+        else:
+            run_cmd(["git", "-C", str(repo_path), "pull"])
+
+        run_cmd(["git", "-C", str(repo_path), "fetch", "--prune"])
         success, output = run_cmd(
-            ["git", "-C", repo, "branch", "--format=%(refname:short)"]
+            [
+                "git",
+                "-C",
+                str(repo_path),
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/remotes/origin/",
+            ]
         )
         if success:
-            branches = [b.strip() for b in output.splitlines()]
+            lines = [l.strip() for l in output.splitlines()]
+            branches = [
+                l.replace("origin/", "", 1)
+                for l in lines
+                if l and not l.startswith("origin/HEAD")
+            ]
         else:
             branches = []
 
-        container.mount(BranchSelector(repo, branches, self.show_repo_selector))
+        container.mount(
+            BranchSelector(str(repo_path), branches, self.show_repo_selector)
+        )
 
     def show_repo_selector(self) -> None:
         container = self.query_one("#main_container")
