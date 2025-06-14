@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Select, Button, Static, Input
+from textual.widgets import Header, Footer, Select, Button, Static
 from textual.containers import Container
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
@@ -14,13 +14,67 @@ class RepoSelector(Static):
         self.on_select = on_select
 
     def compose(self) -> ComposeResult:
-        yield Static("Select a repository:")
+        yield Static("Select a repository:", id="prompt")
         yield Select(options=[(Path(r).name, r) for r in self.repos], id="repo_select")
         yield Button("Continue", id="continue")
+        confirm = Static("", id="confirm_text")
+        confirm.display = False
+        yield confirm
+        confirm_btn = Button("Confirm", id="confirm")
+        confirm_btn.display = False
+        yield confirm_btn
+        cancel_btn = Button("Cancel", id="cancel")
+        cancel_btn.display = False
+        yield cancel_btn
 
     def on_button_pressed(self, event):
-        repo = self.query_one("#repo_select").value
-        self.on_select(repo)
+        if event.button.id == "continue":
+            repo = self.query_one("#repo_select").value
+            if repo:
+                self.selected_repo = repo
+                confirm = self.query_one("#confirm_text")
+                confirm.update(f"Use repository '{Path(repo).name}'?")
+                confirm.display = True
+                self.query_one("#confirm").display = True
+                self.query_one("#cancel").display = True
+        elif event.button.id == "confirm" and getattr(self, "selected_repo", None):
+            self.on_select(self.selected_repo)
+        elif event.button.id == "cancel":
+            self.query_one("#confirm_text").display = False
+            self.query_one("#confirm").display = False
+            self.query_one("#cancel").display = False
+
+
+class BranchList(Static):
+    def __init__(self, repo: str, on_back):
+        super().__init__(id="branch_list")
+        self.repo = repo
+        self.on_back = on_back
+        self.branches: list[str] = []
+
+    def on_mount(self) -> None:
+        self.refresh_branches()
+
+    def refresh_branches(self) -> None:
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.repo, "branch", "--format=%(refname:short)"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.branches = [b.strip() for b in result.stdout.splitlines()]
+        except subprocess.CalledProcessError:
+            self.branches = []
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"Branches for {Path(self.repo).name}:")
+        yield Select(options=[(b, b) for b in self.branches], id="branch_select")
+        yield Button("Back", id="back")
+
+    def on_button_pressed(self, event) -> None:
+        if event.button.id == "back":
+            self.on_back()
 
 class PRManagerApp(App):
     CSS_PATH = None
@@ -41,13 +95,21 @@ class PRManagerApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         self.load_config()
-        yield Container(RepoSelector(self.repositories, self.on_repo_selected))
+        yield Container(RepoSelector(self.repositories, self.on_repo_selected), id="main_container")
         yield Footer()
 
     def on_repo_selected(self, repo):
         self.selected_repo = repo
-        # TODO: Show branch selection UI
-        self.exit(f"Selected repo: {repo}")
+        container = self.query_one("#main_container")
+        selector = container.query_one(RepoSelector)
+        self.call_after_refresh(selector.remove)
+        container.mount(BranchList(repo, self.show_repo_selector))
+
+    def show_repo_selector(self) -> None:
+        container = self.query_one("#main_container")
+        branch_list = container.query_one(BranchList)
+        self.call_after_refresh(branch_list.remove)
+        container.mount(RepoSelector(self.repositories, self.on_repo_selected))
 
 if __name__ == "__main__":
     PRManagerApp().run()
