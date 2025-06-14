@@ -1,0 +1,2 @@
+[console_scripts]
+gh-pr-manager = gh_pr_manager.main:PRManagerApp.run
