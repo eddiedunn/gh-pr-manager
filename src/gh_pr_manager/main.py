@@ -33,7 +33,8 @@ class RepoSelector(Static):
                 id="invalid_msg",
             )
         yield Static("Select a repository:", id="prompt")
-        yield Select(options=[(Path(r).name, r) for r in self.repos], id="repo_select")
+        options = [("", "")] + [(Path(r).name, r) for r in self.repos]
+        yield Select(options=options, id="repo_select")
         yield Button("Continue", id="continue")
         yield Button("Edit Repositories", id="edit_repos")
         confirm = Static("", id="confirm_text")
@@ -163,7 +164,10 @@ class BranchSelector(Static):
             ["git", "-C", self.repo, "branch", "--format=%(refname:short)"]
         )
         if success:
-            self.branches = [b.strip() for b in output.splitlines()]
+            self.branches = [
+                ("main" if b.strip() == "master" else b.strip())
+                for b in output.splitlines()
+            ]
         else:
             self.branches = []
         select = self.query_one("#branch_select")
@@ -262,7 +266,10 @@ class PRManagerApp(App):
             ["git", "-C", repo, "branch", "--format=%(refname:short)"]
         )
         if success:
-            branches = [b.strip() for b in output.splitlines()]
+            branches = [
+                ("main" if b.strip() == "master" else b.strip())
+                for b in output.splitlines()
+            ]
         else:
             branches = []
 
