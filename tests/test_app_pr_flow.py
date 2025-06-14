@@ -40,6 +40,8 @@ async def test_pr_flow_success(tmp_path, monkeypatch):
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
+        pilot.app.on_owner_selected("org")
+        await pilot.pause()
         pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
         pilot.app.query_one("#branch_select").value = "feature"
@@ -76,6 +78,8 @@ async def test_pr_flow_create_error(tmp_path, monkeypatch):
 
     app = PRManagerApp()
     async with app.run_test() as pilot:
+        await pilot.pause()
+        pilot.app.on_owner_selected("org")
         await pilot.pause()
         pilot.app.on_repo_selected(str(repo))
         await pilot.pause()

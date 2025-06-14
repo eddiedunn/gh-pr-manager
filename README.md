@@ -3,7 +3,8 @@
 A text-based user interface (TUI) Python app for managing GitHub branches and pull requests using the `gh` CLI.
 
 ## Features
- - Store the last selected repository for quick access
+- Store the last selected repository for quick access
+- Choose a repository from your GitHub organizations or account
 - List, delete, or select branches
 - Create, merge, and delete branches via PR in one step
 - Interactive branch actions widget for deleting or merging via PR
