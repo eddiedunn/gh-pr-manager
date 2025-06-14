@@ -25,7 +25,22 @@ async def test_select_repo_with_no_branches(tmp_path, monkeypatch):
         sel = pilot.app.query_one(BranchSelector)
         assert sel is not None
         select = pilot.app.query_one("#branch_select")
-        assert select.options == [("main", "main")]
+        # ``Select`` doesn't expose an ``options`` attribute in newer Textual
+        # versions, so inspect the private ``_options`` list which includes a
+        # blank entry when ``allow_blank`` is True.
+        options = getattr(select, "_options", [])
+        if options and options[0][0] == "":
+            options = options[1:]
+        # Determine the expected branch name from git directly to avoid
+        # assumptions about the default branch (``main`` vs ``master``).
+        result = subprocess.run(
+            ["git", "-C", str(repo), "branch", "--format=%(refname:short)"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected = result.stdout.strip()
+        assert options == [(expected, expected)]
 
 @pytest.mark.asyncio
 async def test_try_pr_with_no_branch_selected(tmp_path, monkeypatch):

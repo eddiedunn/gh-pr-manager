@@ -171,7 +171,10 @@ class BranchSelector(Static):
         else:
             self.branches = []
         select = self.query_one("#branch_select")
-        select.options = [(b, b) for b in self.branches]
+        # Textual's Select widget manages options via ``set_options`` in newer
+        # releases. Assigning to ``options`` no longer works, so we explicitly
+        # update the list here.
+        select.set_options([(b, b) for b in self.branches])
 
 
 class RepoEditor(Static):
