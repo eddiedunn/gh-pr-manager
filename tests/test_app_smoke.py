@@ -7,6 +7,7 @@ from pathlib import Path
 
 from gh_pr_manager import main
 from gh_pr_manager.main import PRManagerApp, BranchSelector
+from gh_pr_manager import utils
 
 @pytest.mark.asyncio
 async def test_app_runs():
@@ -58,17 +59,14 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_run(cmd, *a, **kw):
+    def fake_run_cmd(cmd, cwd=None):
         calls.append(cmd)
-        class R:
-            stdout = ""
-            stderr = ""
-
         if cmd[:4] == ["git", "-C", str(repo), "branch"] and "--format=%(refname:short)" in cmd:
-            R.stdout = "main\nfeature\n"
-        return R
+            return True, "main\nfeature\n"
+        return True, ""
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(utils, "run_cmd", fake_run_cmd)
+    monkeypatch.setattr(main, "run_cmd", fake_run_cmd)
 
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -114,3 +112,24 @@ async def test_edit_repositories_updates_config(tmp_path, monkeypatch):
     data = json.loads(conf.read_text())
     assert data["repositories"] == [str(repo2), str(new_repo)]
     assert options == [str(repo2), str(new_repo)]
+
+
+@pytest.mark.asyncio
+async def test_invalid_repo_shows_message(tmp_path, monkeypatch):
+    repo = tmp_path / "valid"
+    repo.mkdir()
+    bad_repo = tmp_path / "missing"
+
+    conf = tmp_path / "config.json"
+    conf.write_text(json.dumps({"repositories": [str(repo), str(bad_repo)]}))
+    monkeypatch.setattr(main, "CONFIG_PATH", conf)
+
+    app = PRManagerApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        msg = pilot.app.query_one("#invalid_msg")
+        assert "missing" in msg.renderable
+        select = pilot.app.query_one("#repo_select")
+        options = [opt[1] for opt in select._options[1:]]
+        assert str(repo) in options
+        assert str(bad_repo) not in options
