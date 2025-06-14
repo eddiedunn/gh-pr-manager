@@ -7,7 +7,7 @@ A text-based user interface (TUI) Python app for managing GitHub branches and pu
 - List, delete, or select branches
 - Create, merge, and delete branches via PR in one step
 - Interactive branch actions widget for deleting or merging via PR
-- Update the list of managed repositories
+- Edit the list of managed repositories within the TUI
 
 ## Requirements
 - Python 3.8+
@@ -25,4 +25,4 @@ python main.py
 ```
 
 ## Configuration
-Edit `config.json` to add/remove repositories.
+Use the **Edit Repositories** view or modify `config.json` manually.

@@ -11,7 +11,7 @@ This document tracks the tasks, milestones, and ongoing progress for the develop
 - [x] Repository selection UI from pre-configured list
 - [x] Branch listing UI after repo selection
 - [x] Branch actions: delete, PR+merge+delete flow
-- [ ] Repo list editing flow (add/remove repos)
+- [x] Repo list editing flow (add/remove repos)
 - [ ] Error handling and user feedback for all flows
   - [ ] Handle missing/invalid repositories
   - [ ] Handle gh CLI errors
@@ -37,6 +37,7 @@ This document tracks the tasks, milestones, and ongoing progress for the develop
 ## Progress Log
 
 - **2025-06-14:** Project initialized, test infra working, AGENTS.md added, planning and requirements clarified.
+- **2025-06-15:** Implemented repo list editing UI and config updates.
 
 ---
 
