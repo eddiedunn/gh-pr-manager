@@ -1,0 +1,27 @@
+[project]
+name = "gh-pr-manager"
+version = "0.1.0"
+description = "A TUI Python app for managing GitHub branches and PRs using the gh CLI."
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "textual[test]"
+]
+
+[project.scripts]
+gh-pr-manager = "gh_pr_manager.main:PRManagerApp.run"
+
+[tool.uv]
+virtualenvs.in-project = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "--import-mode=importlib"
+
+[tool.setuptools.packages.find]
+where = ["src"]
