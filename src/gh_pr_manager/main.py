@@ -10,6 +10,7 @@ from textual.widgets import (
     Select,
     Button,
     Static,
+    Input,
 )
 from textual.containers import Container
 from textual.css.query import NoMatches
@@ -27,20 +28,66 @@ class AuthScreen(Static):
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
-class RepoSelector(Static):
-    """Temporary placeholder for repository selection."""
+
+class OrgSelector(Static):
+    """Widget for choosing a GitHub organization or user account."""
 
     def __init__(self, on_select):
-        super().__init__()
+        super().__init__(id="org_selector")
         self.on_select = on_select
 
     def compose(self) -> ComposeResult:
-        yield Static("Select repository (not implemented)", id="prompt")
-        yield Button("Continue", id="continue")
+        yield Static("Select an organization:")
+        yield Select(options=[], id="org_select")
+        yield Button("Continue", id="org_continue")
 
-    def on_button_pressed(self, event):
-        if event.button.id == "continue":
-            self.on_select("")
+    def on_mount(self) -> None:
+        login = github_client.get_user_login() or ""
+        orgs = github_client.get_user_orgs()
+        options = [(login, login)] if login else []
+        options += [(org, org) for org in orgs]
+        self.query_one("#org_select").options = options
+
+    def on_button_pressed(self, event) -> None:
+        if event.button.id == "org_continue":
+            owner = self.query_one("#org_select").value
+            if owner:
+                self.on_select(owner)
+
+
+class RepoSelectionWidget(Static):
+    """Widget for selecting a repository from the chosen owner."""
+
+    def __init__(self, owner: str, on_select):
+        super().__init__(id="repo_selector")
+        self.owner = owner
+        self.on_select = on_select
+        self.repos: list[str] = []
+
+    def compose(self) -> ComposeResult:
+        yield Static(f"Repositories for {self.owner}")
+        yield Input(placeholder="Filter", id="repo_filter")
+        yield Select(options=[], id="repo_select")
+        yield Static("Loading...", id="repo_loading")
+        yield Button("Select", id="repo_continue")
+
+    def on_mount(self) -> None:
+        repos = github_client.get_repos(self.owner)
+        self.repos = repos
+        select = self.query_one("#repo_select")
+        select.options = [(r, r) for r in repos]
+        self.query_one("#repo_loading").remove()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        term = event.value.lower()
+        filtered = [(r, r) for r in self.repos if term in r.lower()]
+        self.query_one("#repo_select").options = filtered
+
+    def on_button_pressed(self, event) -> None:
+        if event.button.id == "repo_continue":
+            repo = self.query_one("#repo_select").value
+            if repo:
+                self.on_select(repo)
 
 
 class BranchActions(Static):
@@ -172,16 +219,25 @@ class PRManagerApp(App):
 
         self.load_config()
         yield Container(
-            RepoSelector(self.on_repo_selected),
+            OrgSelector(self.on_owner_selected),
             id="main_container",
         )
         yield Footer()
 
 
-    def on_repo_selected(self, repo):
-        self.selected_repo = repo
+    def on_owner_selected(self, owner: str) -> None:
         container = self.query_one("#main_container")
-        selector = container.query_one(RepoSelector)
+        selector = container.query_one(OrgSelector)
+        self.call_after_refresh(selector.remove)
+        container.mount(RepoSelectionWidget(owner, self.on_repo_selected))
+
+    def on_repo_selected(self, repo: str) -> None:
+        self.selected_repo = repo
+        # Persist selection
+        with open(CONFIG_PATH, "w") as f:
+            json.dump({"selected_repository": repo}, f)
+        container = self.query_one("#main_container")
+        selector = container.query_one(RepoSelectionWidget)
         self.call_after_refresh(selector.remove)
 
         success, output = run_cmd(
@@ -202,7 +258,7 @@ class PRManagerApp(App):
         except NoMatches:
             pass
         container.remove_children()
-        container.mount(RepoSelector(self.on_repo_selected))
+        container.mount(RepoSelectionWidget(self.selected_repo.split("/")[0], self.on_repo_selected))
 
 if __name__ == "__main__":
     PRManagerApp().run()

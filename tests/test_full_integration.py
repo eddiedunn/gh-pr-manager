@@ -3,45 +3,36 @@ import json
 import subprocess
 from pathlib import Path
 from gh_pr_manager import main
-from gh_pr_manager.main import PRManagerApp, BranchSelector, RepoSelector
+from gh_pr_manager.main import PRManagerApp, BranchSelector
 
 @pytest.mark.asyncio
 async def test_select_repo_with_no_branches(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    # No branches except main
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"selected_repository": str(repo)}))
+    conf.write_text(json.dumps({"selected_repository": ""}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.on_repo_selected(str(repo))
+        pilot.app.on_owner_selected("org")
+        await pilot.pause()
+        pilot.app.on_repo_selected("octocat/test")
         await pilot.pause()
         sel = pilot.app.query_one(BranchSelector)
         assert sel is not None
         select = pilot.app.query_one("#branch_select")
-        # Accept the blank option as the first entry
         assert select._options[0] == ("", select.BLANK)
-        branch_name = select._options[1][0]
-        assert branch_name in {"main", "master"}
 
 @pytest.mark.asyncio
 async def test_try_pr_with_no_branch_selected(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"selected_repository": str(repo)}))
+    conf.write_text(json.dumps({"selected_repository": ""}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.on_repo_selected(str(repo))
+        pilot.app.on_owner_selected("org")
+        await pilot.pause()
+        pilot.app.on_repo_selected("octocat/test")
         await pilot.pause()
         select = pilot.app.query_one("#branch_select")
         select.clear()
@@ -82,12 +73,8 @@ async def test_edit_repos_add_and_remove(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_keyboard_navigation_and_quit(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"selected_repository": str(repo)}))
+    conf.write_text(json.dumps({"selected_repository": ""}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:

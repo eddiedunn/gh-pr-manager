@@ -29,20 +29,16 @@ async def test_auth_screen_shown_when_not_logged_in(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_select_repo_shows_branches(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
-
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"selected_repository": str(repo)}))
+    conf.write_text(json.dumps({"selected_repository": ""}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.on_repo_selected(str(repo))
+        pilot.app.on_owner_selected("org")
+        await pilot.pause()
+        pilot.app.on_repo_selected("org/repo")
         await pilot.pause()
         assert pilot.app.query_one(BranchSelector)
 
@@ -78,6 +74,8 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
 
     app = PRManagerApp()
     async with app.run_test() as pilot:
+        await pilot.pause()
+        pilot.app.on_owner_selected("org")
         await pilot.pause()
         pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
