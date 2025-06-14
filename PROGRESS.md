@@ -22,10 +22,10 @@ This document tracks the tasks, milestones, and ongoing progress for the develop
   - [ ] Integration tests for TUI flows
   - [ ] Mock gh CLI for tests
   - [ ] Test error scenarios and edge cases
-- [ ] Documentation updates
-  - [ ] Update README.md for new features
-  - [ ] Update AGENTS.md for process or structure changes
-  - [ ] Update PROGRESS.md as tasks are completed
+- [x] Documentation updates
+  - [x] Update README.md for new features
+  - [x] Update AGENTS.md for process or structure changes
+  - [x] Update PROGRESS.md as tasks are completed
 
 ### Advanced/Optional
 - [ ] Support for multiple remotes

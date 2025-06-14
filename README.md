@@ -24,5 +24,16 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## Repository and Branch Workflow
+
+1. Launch the app and select a repository from the list defined in `config.json`.
+2. The TUI displays the local branches for the chosen repository.
+3. Use **Delete Branch** to remove the selected branch.
+4. Use **PR/Merge/Delete** to create a pull request, merge it via the GitHub CLI, and delete the branch in one step.
+5. From the repository selection screen you can open **Edit Repositories** to add or remove paths from the configuration.
+
 ## Configuration
-Use the **Edit Repositories** view or modify `config.json` manually.
+Repository paths are stored in `config.json` at the project root. Each entry must
+be the absolute path to a local Git repository. Invalid paths are ignored at
+startup. You can edit this file directly or manage the list through the **Edit
+Repositories** view in the TUI.

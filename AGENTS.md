@@ -51,4 +51,5 @@
 ## Agent/Automation Notes
 - When exploring or editing, prefer `src/gh_pr_manager/` for main code and `tests/` for tests.
 - Always update or create documentation (`README.md`, `AGENTS.md`) when introducing new major features or workflows.
+- The README now includes a section describing the repository and branch workflow along with configuration details. Keep this information in sync with any workflow changes.
 - Use this file for any future organization-wide or agent-specific configuration.
