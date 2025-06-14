@@ -8,9 +8,9 @@ This document tracks the tasks, milestones, and ongoing progress for the develop
 - [x] Project structure: modern `src/` layout, test infra, and config files
 - [x] Pytest-based test infrastructure with Textual integration
 - [x] AGENTS.md and documentation setup
-- [ ] Repository selection UI from pre-configured list
-- [ ] Branch listing UI after repo selection
-- [ ] Branch actions: delete, PR+merge+delete flow
+- [x] Repository selection UI from pre-configured list
+- [x] Branch listing UI after repo selection
+- [x] Branch actions: delete, PR+merge+delete flow
 - [ ] Repo list editing flow (add/remove repos)
 - [ ] Error handling and user feedback for all flows
   - [ ] Handle missing/invalid repositories

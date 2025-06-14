@@ -45,6 +45,64 @@ class RepoSelector(Static):
             self.query_one("#cancel").display = False
 
 
+class BranchActions(Static):
+    """Display branch actions like deletion or PR workflow."""
+
+    def __init__(self, repo: str, branch_getter, refresh):
+        super().__init__(id="branch_actions")
+        self.repo = repo
+        self.branch_getter = branch_getter
+        self.refresh_callback = refresh
+
+    def compose(self) -> ComposeResult:
+        yield Button("Delete Branch", id="delete_branch")
+        yield Button("PR/Merge/Delete", id="pr_flow")
+        yield Static("", id="action_msg")
+
+    def on_button_pressed(self, event) -> None:
+        branch = self.branch_getter()
+        msg = self.query_one("#action_msg")
+        if not branch:
+            msg.update("No branch selected.")
+            return
+
+        try:
+            if event.button.id == "delete_branch":
+                subprocess.run(
+                    ["git", "-C", self.repo, "branch", "-D", branch],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                msg.update(f"Deleted {branch}")
+            elif event.button.id == "pr_flow":
+                subprocess.run(
+                    ["gh", "pr", "create", "--fill", "--head", branch],
+                    cwd=self.repo,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["gh", "pr", "merge", "--merge", "--delete-branch", "--yes"],
+                    cwd=self.repo,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", self.repo, "branch", "-D", branch],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                msg.update(f"PR merged and {branch} deleted")
+        except subprocess.CalledProcessError as e:
+            msg.update(f"Action failed: {(e.stderr or e.stdout).strip()}")
+
+        self.refresh_callback()
+
+
 class BranchSelector(Static):
     def __init__(self, repo: str, branches: list[str], on_back):
         super().__init__(id="branch_list")
@@ -55,11 +113,30 @@ class BranchSelector(Static):
     def compose(self) -> ComposeResult:
         yield Static(f"Branches for {Path(self.repo).name}:")
         yield Select(options=[(b, b) for b in self.branches], id="branch_select")
+        yield BranchActions(
+            self.repo,
+            lambda: self.query_one("#branch_select").value,
+            self.refresh_branches,
+        )
         yield Button("Back", id="back")
 
     def on_button_pressed(self, event) -> None:
         if event.button.id == "back":
             self.on_back()
+
+    def refresh_branches(self) -> None:
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.repo, "branch", "--format=%(refname:short)"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.branches = [b.strip() for b in result.stdout.splitlines()]
+        except subprocess.CalledProcessError:
+            self.branches = []
+        select = self.query_one("#branch_select")
+        select.options = [(b, b) for b in self.branches]
 
 class PRManagerApp(App):
     CSS_PATH = None
