@@ -1,6 +1,7 @@
 from gh_pr_manager import main
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -24,14 +25,20 @@ async def test_pr_flow_success(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     monkeypatch.setattr(PRManagerApp, "CONFIG_PATH", conf, raising=False)
 
+    repo_clone = Path.home() / ".cache" / "gh_pr_manager" / str(repo)
+
     def fake_run(cmd, cwd=None, capture_output=True, text=True):
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "--format=%(refname:short)" in cmd:
-            return _completed(cmd, stdout="main\nfeature\n")
+        if cmd[:4] == ["git", "-C", str(repo_clone), "fetch"]:
+            return _completed(cmd)
+        if cmd[:4] == ["git", "-C", str(repo_clone), "for-each-ref"]:
+            return _completed(cmd, stdout="origin/main\norigin/feature\n")
         if cmd[:3] == ["gh", "pr", "create"]:
             return _completed(cmd)
         if cmd[:3] == ["gh", "pr", "merge"]:
             return _completed(cmd)
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "-D" in cmd:
+        if cmd[:4] == ["git", "-C", str(repo_clone), "branch"] and "-D" in cmd:
+            return _completed(cmd)
+        if cmd[:4] == ["git", "-C", str(repo_clone), "push"] and "--delete" in cmd:
             return _completed(cmd)
         return _completed(cmd)
 
@@ -65,12 +72,18 @@ async def test_pr_flow_create_error(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     monkeypatch.setattr(PRManagerApp, "CONFIG_PATH", conf, raising=False)
 
+    repo_clone = Path.home() / ".cache" / "gh_pr_manager" / str(repo)
+
     def fake_run(cmd, cwd=None, capture_output=True, text=True):
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "--format=%(refname:short)" in cmd:
-            return _completed(cmd, stdout="main\nfeature\n")
+        if cmd[:4] == ["git", "-C", str(repo_clone), "fetch"]:
+            return _completed(cmd)
+        if cmd[:4] == ["git", "-C", str(repo_clone), "for-each-ref"]:
+            return _completed(cmd, stdout="origin/main\norigin/feature\n")
         if cmd[:3] == ["gh", "pr", "create"]:
             return _completed(cmd, 1, stderr="create fail")
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "-D" in cmd:
+        if cmd[:4] == ["git", "-C", str(repo_clone), "branch"] and "-D" in cmd:
+            return _completed(cmd)
+        if cmd[:4] == ["git", "-C", str(repo_clone), "push"] and "--delete" in cmd:
             return _completed(cmd)
         return _completed(cmd)
 

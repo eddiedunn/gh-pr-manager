@@ -42,7 +42,7 @@ async def test_branch_actions_delete_branch(tmp_path, monkeypatch):
 
     def fake_run(cmd, cwd=None, capture_output=True, text=True):
         calls.append(cmd)
-        if cmd[:4] == ["git", "-C", str(repo), "branch"] and "-D" in cmd:
+        if cmd[:4] == ["git", "-C", str(repo), "push"] and "--delete" in cmd:
             return _completed(cmd)
         return _completed(cmd)
 
@@ -54,7 +54,7 @@ async def test_branch_actions_delete_branch(tmp_path, monkeypatch):
         await pilot.pause()
         msg = pilot.app.query_one("#action_msg").renderable
 
-    assert ["git", "-C", str(repo), "branch", "-D", "feature"] in calls
+    assert ["git", "-C", str(repo), "push", "origin", "--delete", "feature"] in calls
     assert "Deleted feature" in msg
 
 

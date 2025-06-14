@@ -33,7 +33,8 @@ python main.py
 
 1. Launch the app and connect your GitHub account with `gh auth login`.
 2. Select a GitHub organization or your personal account to browse repositories.
-3. Search and select a single repository from the list.
+3. Search and select a single repository from the list. The app clones the repo
+   to a temporary cache directory (or updates the existing clone).
 4. The TUI displays the branches for the selected repository.
 5. Use **Delete Branch** to remove the selected branch.
 6. Use **PR/Merge/Delete** to create a pull request, merge it via the GitHub CLI, and delete the branch in one step.
