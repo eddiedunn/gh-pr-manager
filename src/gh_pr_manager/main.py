@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from .utils import run_cmd
+from . import github_client
 from textual.app import App, ComposeResult
 from textual.widgets import (
     Header,
@@ -12,6 +13,17 @@ from textual.widgets import (
 )
 from textual.containers import Container
 from textual.css.query import NoMatches
+
+
+class AuthScreen(Static):
+    """Displayed when the GitHub CLI is not authenticated."""
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            "Please run `gh auth login` in your terminal and restart the app.",
+            id="auth_msg",
+        )
+
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
@@ -153,6 +165,11 @@ class PRManagerApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        if not github_client.check_auth_status():
+            yield Container(AuthScreen(), id="main_container")
+            yield Footer()
+            return
+
         self.load_config()
         yield Container(
             RepoSelector(self.on_repo_selected),

@@ -40,9 +40,7 @@ async def test_pr_flow_success(tmp_path, monkeypatch):
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.query_one("#repo_select").value = str(repo)
-        await pilot.click("#continue")
-        await pilot.click("#confirm")
+        pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
         pilot.app.query_one("#branch_select").value = "feature"
         await pilot.click("#pr_flow")
@@ -79,9 +77,7 @@ async def test_pr_flow_create_error(tmp_path, monkeypatch):
     app = PRManagerApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        pilot.app.query_one("#repo_select").value = str(repo)
-        await pilot.click("#continue")
-        await pilot.click("#confirm")
+        pilot.app.on_repo_selected(str(repo))
         await pilot.pause()
         pilot.app.query_one("#branch_select").value = "feature"
         await pilot.click("#pr_flow")
