@@ -1,6 +1,7 @@
 import json
-import subprocess
 from pathlib import Path
+
+from .utils import run_cmd, filter_valid_repos
 from textual.app import App, ComposeResult
 from textual.widgets import (
     Header,
@@ -17,13 +18,20 @@ from textual.css.query import NoMatches
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 class RepoSelector(Static):
-    def __init__(self, repos, on_select, on_edit):
+    def __init__(self, repos, on_select, on_edit, invalid=None):
         super().__init__()
         self.repos = repos
         self.on_select = on_select
         self.on_edit = on_edit
+        self.invalid = invalid or []
 
     def compose(self) -> ComposeResult:
+        if self.invalid:
+            removed = ", ".join(Path(r).name for r in self.invalid)
+            yield Static(
+                f"Removed invalid repos: {removed}. Please edit your config.",
+                id="invalid_msg",
+            )
         yield Static("Select a repository:", id="prompt")
         yield Select(options=[(Path(r).name, r) for r in self.repos], id="repo_select")
         yield Button("Continue", id="continue")
@@ -79,39 +87,51 @@ class BranchActions(Static):
             msg.update("No branch selected.")
             return
 
-        try:
-            if event.button.id == "delete_branch":
-                subprocess.run(
-                    ["git", "-C", self.repo, "branch", "-D", branch],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+        if event.button.id == "delete_branch":
+            success, output = run_cmd([
+                "git",
+                "-C",
+                self.repo,
+                "branch",
+                "-D",
+                branch,
+            ])
+            if success:
                 msg.update(f"Deleted {branch}")
-            elif event.button.id == "pr_flow":
-                subprocess.run(
-                    ["gh", "pr", "create", "--fill", "--head", branch],
-                    cwd=self.repo,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                subprocess.run(
-                    ["gh", "pr", "merge", "--merge", "--delete-branch", "--yes"],
-                    cwd=self.repo,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                subprocess.run(
-                    ["git", "-C", self.repo, "branch", "-D", branch],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+            else:
+                msg.update(f"Delete failed: {output}")
+        elif event.button.id == "pr_flow":
+            success, output = run_cmd(
+                ["gh", "pr", "create", "--fill", "--head", branch], cwd=self.repo
+            )
+            if not success:
+                msg.update(f"Create failed: {output}")
+                self.refresh_callback()
+                return
+
+            success, output = run_cmd(
+                [
+                    "gh",
+                    "pr",
+                    "merge",
+                    "--merge",
+                    "--delete-branch",
+                    "--yes",
+                ],
+                cwd=self.repo,
+            )
+            if not success:
+                msg.update(f"Merge failed: {output}")
+                self.refresh_callback()
+                return
+
+            success, output = run_cmd(
+                ["git", "-C", self.repo, "branch", "-D", branch]
+            )
+            if success:
                 msg.update(f"PR merged and {branch} deleted")
-        except subprocess.CalledProcessError as e:
-            msg.update(f"Action failed: {(e.stderr or e.stdout).strip()}")
+            else:
+                msg.update(f"Cleanup failed: {output}")
 
         self.refresh_callback()
 
@@ -138,15 +158,12 @@ class BranchSelector(Static):
             self.on_back()
 
     def refresh_branches(self) -> None:
-        try:
-            result = subprocess.run(
-                ["git", "-C", self.repo, "branch", "--format=%(refname:short)"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            self.branches = [b.strip() for b in result.stdout.splitlines()]
-        except subprocess.CalledProcessError:
+        success, output = run_cmd(
+            ["git", "-C", self.repo, "branch", "--format=%(refname:short)"]
+        )
+        if success:
+            self.branches = [b.strip() for b in output.splitlines()]
+        else:
             self.branches = []
         select = self.query_one("#branch_select")
         select.options = [(b, b) for b in self.branches]
@@ -196,6 +213,7 @@ class PRManagerApp(App):
         super().__init__()
         self.repositories = []
         self.selected_repo = None
+        self.invalid_repos: list[str] = []
 
     def load_config(self):
         if CONFIG_PATH.exists():
@@ -203,18 +221,24 @@ class PRManagerApp(App):
                 self.repositories = json.load(f)["repositories"]
         else:
             self.repositories = []
+        self.repositories, self.invalid_repos = filter_valid_repos(self.repositories)
 
     def compose(self) -> ComposeResult:
         yield Header()
         self.load_config()
         yield Container(
-            RepoSelector(self.repositories, self.on_repo_selected, self.open_repo_editor),
+            RepoSelector(
+                self.repositories,
+                self.on_repo_selected,
+                self.open_repo_editor,
+                self.invalid_repos,
+            ),
             id="main_container",
         )
         yield Footer()
 
     def save_repositories(self, repos: list[str]) -> None:
-        self.repositories = repos
+        self.repositories, self.invalid_repos = filter_valid_repos(repos)
         with open(CONFIG_PATH, "w") as f:
             json.dump({"repositories": self.repositories}, f, indent=4)
         self.show_repo_selector()
@@ -233,15 +257,12 @@ class PRManagerApp(App):
         selector = container.query_one(RepoSelector)
         self.call_after_refresh(selector.remove)
 
-        try:
-            result = subprocess.run(
-                ["git", "-C", repo, "branch", "--format=%(refname:short)"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            branches = [b.strip() for b in result.stdout.splitlines()]
-        except subprocess.CalledProcessError:
+        success, output = run_cmd(
+            ["git", "-C", repo, "branch", "--format=%(refname:short)"]
+        )
+        if success:
+            branches = [b.strip() for b in output.splitlines()]
+        else:
             branches = []
 
         container.mount(BranchSelector(repo, branches, self.show_repo_selector))
@@ -259,7 +280,12 @@ class PRManagerApp(App):
         except NoMatches:
             pass
         container.mount(
-            RepoSelector(self.repositories, self.on_repo_selected, self.open_repo_editor)
+            RepoSelector(
+                self.repositories,
+                self.on_repo_selected,
+                self.open_repo_editor,
+                self.invalid_repos,
+            )
         )
 
 if __name__ == "__main__":
