@@ -24,16 +24,22 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Repository and Branch Workflow
+## Repository and Branch Workflow (Updated)
 
-1. Launch the app and select a repository from the list defined in `config.json`.
-2. The TUI displays the local branches for the chosen repository.
-3. Use **Delete Branch** to remove the selected branch.
-4. Use **PR/Merge/Delete** to create a pull request, merge it via the GitHub CLI, and delete the branch in one step.
-5. From the repository selection screen you can open **Edit Repositories** to add or remove paths from the configuration.
+1. Launch the app and connect your GitHub account (via OAuth or personal access token).
+2. Select a GitHub organization or your personal account to browse repositories.
+3. Search and select a single repository from the list.
+4. The TUI displays the branches for the selected repository.
+5. Use **Delete Branch** to remove the selected branch.
+6. Use **PR/Merge/Delete** to create a pull request, merge it via the GitHub CLI, and delete the branch in one step.
+7. From the repository selection screen you can change your selected GitHub repository at any time.
 
 ## Configuration
-Repository paths are stored in `config.json` at the project root. Each entry must
-be the absolute path to a local Git repository. Invalid paths are ignored at
-startup. You can edit this file directly or manage the list through the **Edit
-Repositories** view in the TUI.
+The selected repository is stored in `config.json` at the project root as the canonical GitHub repository name (e.g., `org/repo`).
+
+- On first launch, you will be prompted to connect your GitHub account.
+- You can update your selected repository at any time via the TUI.
+- The app no longer tracks local repository paths; all actions are performed via the GitHub API and the `gh` CLI.
+
+### Migration Note
+If you previously used local paths in your config, you will need to re-select your repository using the new GitHub-based flow. The old format is no longer supported.

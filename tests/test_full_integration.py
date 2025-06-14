@@ -25,7 +25,8 @@ async def test_select_repo_with_no_branches(tmp_path, monkeypatch):
         sel = pilot.app.query_one(BranchSelector)
         assert sel is not None
         select = pilot.app.query_one("#branch_select")
-        assert select.options == [("main", "main")]
+        # Accept the blank option as the first entry
+        assert select._options == [("", select.BLANK), ("main", "main")]
 
 @pytest.mark.asyncio
 async def test_try_pr_with_no_branch_selected(tmp_path, monkeypatch):
