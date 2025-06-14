@@ -82,3 +82,35 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
         await pilot.pause()
 
     assert ["git", "-C", str(repo), "branch", "-D", "feature"] in calls
+
+
+@pytest.mark.asyncio
+async def test_edit_repositories_updates_config(tmp_path, monkeypatch):
+    repo1 = tmp_path / "r1"
+    repo1.mkdir()
+    repo2 = tmp_path / "r2"
+    repo2.mkdir()
+
+    conf = tmp_path / "config.json"
+    conf.write_text(json.dumps({"repositories": [str(repo1), str(repo2)]}))
+    monkeypatch.setattr(main, "CONFIG_PATH", conf)
+
+    new_repo = tmp_path / "r3"
+    new_repo.mkdir()
+
+    app = PRManagerApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.click("#edit_repos")
+        pilot.app.query_one("#new_repo_input").value = str(new_repo)
+        await pilot.click("#add_repo")
+        await pilot.click("#repo_cb_0")
+        await pilot.click("#save_repos")
+        await pilot.pause()
+
+        select = pilot.app.query_one("#repo_select")
+        options = [opt[1] for opt in select._options[1:]]
+
+    data = json.loads(conf.read_text())
+    assert data["repositories"] == [str(repo2), str(new_repo)]
+    assert options == [str(repo2), str(new_repo)]

@@ -2,21 +2,32 @@ import json
 import subprocess
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Select, Button, Static
+from textual.widgets import (
+    Header,
+    Footer,
+    Select,
+    Button,
+    Static,
+    Input,
+    Checkbox,
+)
 from textual.containers import Container
+from textual.css.query import NoMatches
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 class RepoSelector(Static):
-    def __init__(self, repos, on_select):
+    def __init__(self, repos, on_select, on_edit):
         super().__init__()
         self.repos = repos
         self.on_select = on_select
+        self.on_edit = on_edit
 
     def compose(self) -> ComposeResult:
         yield Static("Select a repository:", id="prompt")
         yield Select(options=[(Path(r).name, r) for r in self.repos], id="repo_select")
         yield Button("Continue", id="continue")
+        yield Button("Edit Repositories", id="edit_repos")
         confirm = Static("", id="confirm_text")
         confirm.display = False
         yield confirm
@@ -39,6 +50,8 @@ class RepoSelector(Static):
                 self.query_one("#cancel").display = True
         elif event.button.id == "confirm" and getattr(self, "selected_repo", None):
             self.on_select(self.selected_repo)
+        elif event.button.id == "edit_repos":
+            self.on_edit()
         elif event.button.id == "cancel":
             self.query_one("#confirm_text").display = False
             self.query_one("#confirm").display = False
@@ -138,6 +151,43 @@ class BranchSelector(Static):
         select = self.query_one("#branch_select")
         select.options = [(b, b) for b in self.branches]
 
+
+class RepoEditor(Static):
+    """Widget for adding/removing repositories."""
+
+    def __init__(self, repos: list[str], on_save, on_cancel):
+        super().__init__(id="repo_editor")
+        self.repos = repos
+        self.on_save = on_save
+        self.on_cancel = on_cancel
+
+    def compose(self) -> ComposeResult:
+        yield Static("Edit repositories:")
+        yield Container(
+            *[Checkbox(repo, id=f"repo_cb_{i}") for i, repo in enumerate(self.repos)],
+            id="repo_checks",
+        )
+        yield Input(placeholder="New repo path", id="new_repo_input")
+        yield Button("Add", id="add_repo")
+        yield Button("Save", id="save_repos")
+        yield Button("Cancel", id="cancel_edit")
+
+    def on_button_pressed(self, event) -> None:
+        if event.button.id == "add_repo":
+            new_repo = self.query_one("#new_repo_input").value.strip()
+            if new_repo:
+                self.query_one("#repo_checks").mount(Checkbox(new_repo))
+                self.query_one("#new_repo_input").value = ""
+        elif event.button.id == "save_repos":
+            repos = [
+                str(cb.label)
+                for cb in self.query("#repo_checks Checkbox")
+                if not cb.value
+            ]
+            self.on_save(repos)
+        elif event.button.id == "cancel_edit":
+            self.on_cancel()
+
 class PRManagerApp(App):
     CSS_PATH = None
     BINDINGS = [ ("q", "quit", "Quit") ]
@@ -157,8 +207,25 @@ class PRManagerApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         self.load_config()
-        yield Container(RepoSelector(self.repositories, self.on_repo_selected), id="main_container")
+        yield Container(
+            RepoSelector(self.repositories, self.on_repo_selected, self.open_repo_editor),
+            id="main_container",
+        )
         yield Footer()
+
+    def save_repositories(self, repos: list[str]) -> None:
+        self.repositories = repos
+        with open(CONFIG_PATH, "w") as f:
+            json.dump({"repositories": self.repositories}, f, indent=4)
+        self.show_repo_selector()
+
+    def open_repo_editor(self) -> None:
+        container = self.query_one("#main_container")
+        selector = container.query_one(RepoSelector)
+        self.call_after_refresh(selector.remove)
+        container.mount(
+            RepoEditor(self.repositories, self.save_repositories, self.show_repo_selector)
+        )
 
     def on_repo_selected(self, repo):
         self.selected_repo = repo
@@ -181,9 +248,19 @@ class PRManagerApp(App):
 
     def show_repo_selector(self) -> None:
         container = self.query_one("#main_container")
-        branch_list = container.query_one(BranchSelector)
-        self.call_after_refresh(branch_list.remove)
-        container.mount(RepoSelector(self.repositories, self.on_repo_selected))
+        try:
+            branch_list = container.query(BranchSelector).first()
+            self.call_after_refresh(branch_list.remove)
+        except NoMatches:
+            pass
+        try:
+            editor = container.query(RepoEditor).first()
+            self.call_after_refresh(editor.remove)
+        except NoMatches:
+            pass
+        container.mount(
+            RepoSelector(self.repositories, self.on_repo_selected, self.open_repo_editor)
+        )
 
 if __name__ == "__main__":
     PRManagerApp().run()
