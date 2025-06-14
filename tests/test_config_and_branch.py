@@ -23,18 +23,14 @@ def _completed(cmd: list[str], returncode: int = 0, stdout: str = "", stderr: st
     return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
 
 
-def test_load_config_filters_invalid_repos(tmp_path, monkeypatch):
-    valid = tmp_path / "valid"
-    valid.mkdir()
-    invalid = tmp_path / "missing"
+def test_load_config_reads_selected_repo(tmp_path, monkeypatch):
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(valid), str(invalid)]}))
+    conf.write_text(json.dumps({"selected_repository": "example/repo"}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     app = main.PRManagerApp()
     app.load_config()
-    assert app.repositories == [str(valid)]
-    assert app.invalid_repos == [str(invalid)]
+    assert app.selected_repo == "example/repo"
 
 
 @pytest.mark.asyncio

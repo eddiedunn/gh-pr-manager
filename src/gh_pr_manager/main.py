@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from .utils import run_cmd, filter_valid_repos
+from .utils import run_cmd
 from textual.app import App, ComposeResult
 from textual.widgets import (
     Header,
@@ -9,8 +9,6 @@ from textual.widgets import (
     Select,
     Button,
     Static,
-    Input,
-    Checkbox,
 )
 from textual.containers import Container
 from textual.css.query import NoMatches
@@ -18,52 +16,19 @@ from textual.css.query import NoMatches
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 class RepoSelector(Static):
-    def __init__(self, repos, on_select, on_edit, invalid=None):
+    """Temporary placeholder for repository selection."""
+
+    def __init__(self, on_select):
         super().__init__()
-        self.repos = repos
         self.on_select = on_select
-        self.on_edit = on_edit
-        self.invalid = invalid or []
 
     def compose(self) -> ComposeResult:
-        if self.invalid:
-            removed = ", ".join(Path(r).name for r in self.invalid)
-            yield Static(
-                f"Removed invalid repos: {removed}. Please edit your config.",
-                id="invalid_msg",
-            )
-        yield Static("Select a repository:", id="prompt")
-        yield Select(options=[(Path(r).name, r) for r in self.repos], id="repo_select")
+        yield Static("Select repository (not implemented)", id="prompt")
         yield Button("Continue", id="continue")
-        yield Button("Edit Repositories", id="edit_repos")
-        confirm = Static("", id="confirm_text")
-        confirm.display = False
-        yield confirm
-        confirm_btn = Button("Confirm", id="confirm")
-        confirm_btn.display = False
-        yield confirm_btn
-        cancel_btn = Button("Cancel", id="cancel")
-        cancel_btn.display = False
-        yield cancel_btn
 
     def on_button_pressed(self, event):
         if event.button.id == "continue":
-            repo = self.query_one("#repo_select").value
-            if repo:
-                self.selected_repo = repo
-                confirm = self.query_one("#confirm_text")
-                confirm.update(f"Use repository '{Path(repo).name}'?")
-                confirm.display = True
-                self.query_one("#confirm").display = True
-                self.query_one("#cancel").display = True
-        elif event.button.id == "confirm" and getattr(self, "selected_repo", None):
-            self.on_select(self.selected_repo)
-        elif event.button.id == "edit_repos":
-            self.on_edit()
-        elif event.button.id == "cancel":
-            self.query_one("#confirm_text").display = False
-            self.query_one("#confirm").display = False
-            self.query_one("#cancel").display = False
+            self.on_select("")
 
 
 class BranchActions(Static):
@@ -170,41 +135,6 @@ class BranchSelector(Static):
         select.options = [(b, b) for b in self.branches]
 
 
-class RepoEditor(Static):
-    """Widget for adding/removing repositories."""
-
-    def __init__(self, repos: list[str], on_save, on_cancel):
-        super().__init__(id="repo_editor")
-        self.repos = repos
-        self.on_save = on_save
-        self.on_cancel = on_cancel
-
-    def compose(self) -> ComposeResult:
-        yield Static("Edit repositories:")
-        yield Container(
-            *[Checkbox(repo, id=f"repo_cb_{i}") for i, repo in enumerate(self.repos)],
-            id="repo_checks",
-        )
-        yield Input(placeholder="New repo path", id="new_repo_input")
-        yield Button("Add", id="add_repo")
-        yield Button("Save", id="save_repos")
-        yield Button("Cancel", id="cancel_edit")
-
-    def on_button_pressed(self, event) -> None:
-        if event.button.id == "add_repo":
-            new_repo = self.query_one("#new_repo_input").value.strip()
-            if new_repo:
-                self.query_one("#repo_checks").mount(Checkbox(new_repo))
-                self.query_one("#new_repo_input").value = ""
-        elif event.button.id == "save_repos":
-            repos = [
-                str(cb.label)
-                for cb in self.query("#repo_checks Checkbox")
-                if not cb.value
-            ]
-            self.on_save(repos)
-        elif event.button.id == "cancel_edit":
-            self.on_cancel()
 
 class PRManagerApp(App):
     CSS_PATH = None
@@ -212,45 +142,24 @@ class PRManagerApp(App):
 
     def __init__(self):
         super().__init__()
-        self.repositories = []
         self.selected_repo = None
-        self.invalid_repos: list[str] = []
 
     def load_config(self):
         if CONFIG_PATH.exists():
             with open(CONFIG_PATH) as f:
-                self.repositories = json.load(f)["repositories"]
+                self.selected_repo = json.load(f).get("selected_repository", "")
         else:
-            self.repositories = []
-        self.repositories, self.invalid_repos = filter_valid_repos(self.repositories)
+            self.selected_repo = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
         self.load_config()
         yield Container(
-            RepoSelector(
-                self.repositories,
-                self.on_repo_selected,
-                self.open_repo_editor,
-                self.invalid_repos,
-            ),
+            RepoSelector(self.on_repo_selected),
             id="main_container",
         )
         yield Footer()
 
-    def save_repositories(self, repos: list[str]) -> None:
-        self.repositories, self.invalid_repos = filter_valid_repos(repos)
-        with open(CONFIG_PATH, "w") as f:
-            json.dump({"repositories": self.repositories}, f, indent=4)
-        self.show_repo_selector()
-
-    def open_repo_editor(self) -> None:
-        container = self.query_one("#main_container")
-        selector = container.query_one(RepoSelector)
-        self.call_after_refresh(selector.remove)
-        container.mount(
-            RepoEditor(self.repositories, self.save_repositories, self.show_repo_selector)
-        )
 
     def on_repo_selected(self, repo):
         self.selected_repo = repo
@@ -275,19 +184,8 @@ class PRManagerApp(App):
             self.call_after_refresh(branch_list.remove)
         except NoMatches:
             pass
-        try:
-            editor = container.query(RepoEditor).first()
-            self.call_after_refresh(editor.remove)
-        except NoMatches:
-            pass
-        container.mount(
-            RepoSelector(
-                self.repositories,
-                self.on_repo_selected,
-                self.open_repo_editor,
-                self.invalid_repos,
-            )
-        )
+        container.remove_children()
+        container.mount(RepoSelector(self.on_repo_selected))
 
 if __name__ == "__main__":
     PRManagerApp().run()

@@ -26,7 +26,7 @@ async def test_select_repo_shows_branches(tmp_path, monkeypatch):
     subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     app = PRManagerApp()
@@ -54,7 +54,7 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
     subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     calls = []
@@ -82,6 +82,7 @@ async def test_delete_branch_runs_git(tmp_path, monkeypatch):
     assert ["git", "-C", str(repo), "branch", "-D", "feature"] in calls
 
 
+@pytest.mark.skip("repo editing removed")
 @pytest.mark.asyncio
 async def test_edit_repositories_updates_config(tmp_path, monkeypatch):
     repo1 = tmp_path / "r1"
@@ -90,7 +91,7 @@ async def test_edit_repositories_updates_config(tmp_path, monkeypatch):
     repo2.mkdir()
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo1), str(repo2)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo1)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     new_repo = tmp_path / "r3"
@@ -110,10 +111,11 @@ async def test_edit_repositories_updates_config(tmp_path, monkeypatch):
         options = [opt[1] for opt in select._options[1:]]
 
     data = json.loads(conf.read_text())
-    assert data["repositories"] == [str(repo2), str(new_repo)]
-    assert options == [str(repo2), str(new_repo)]
+    assert data["selected_repository"] == str(new_repo)
+    assert options == []
 
 
+@pytest.mark.skip("repo validation removed")
 @pytest.mark.asyncio
 async def test_invalid_repo_shows_message(tmp_path, monkeypatch):
     repo = tmp_path / "valid"
@@ -121,7 +123,7 @@ async def test_invalid_repo_shows_message(tmp_path, monkeypatch):
     bad_repo = tmp_path / "missing"
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo), str(bad_repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
 
     app = PRManagerApp()
