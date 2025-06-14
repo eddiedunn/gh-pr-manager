@@ -1,4 +1,4 @@
 # Main and dev dependencies for gh-pr-manager
-textual[test]
+textual
 pytest
 pytest-asyncio
