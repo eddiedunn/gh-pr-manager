@@ -13,7 +13,7 @@ async def test_select_repo_with_no_branches(tmp_path, monkeypatch):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -36,7 +36,7 @@ async def test_try_pr_with_no_branch_selected(tmp_path, monkeypatch):
     subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -52,6 +52,7 @@ async def test_try_pr_with_no_branch_selected(tmp_path, monkeypatch):
         msg = pilot.app.query_one("#branch_list #action_msg").renderable
         assert "No branch selected" in msg
 
+@pytest.mark.skip("repo editing removed")
 @pytest.mark.asyncio
 async def test_edit_repos_add_and_remove(tmp_path, monkeypatch):
     repo1 = tmp_path / "repo1"
@@ -59,7 +60,7 @@ async def test_edit_repos_add_and_remove(tmp_path, monkeypatch):
     repo1.mkdir()
     repo2.mkdir()
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo1)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo1)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -79,8 +80,7 @@ async def test_edit_repos_add_and_remove(tmp_path, monkeypatch):
         await pilot.pause()
         # Check config file
         config = json.loads(conf.read_text())
-        assert str(repo2) in config["repositories"]
-        assert str(repo1) not in config["repositories"]
+        assert config.get("selected_repository") == str(repo2)
 
 @pytest.mark.asyncio
 async def test_keyboard_navigation_and_quit(tmp_path, monkeypatch):
@@ -89,7 +89,7 @@ async def test_keyboard_navigation_and_quit(tmp_path, monkeypatch):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, check=True, capture_output=True)
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -99,12 +99,13 @@ async def test_keyboard_navigation_and_quit(tmp_path, monkeypatch):
         await pilot.press("q")
         # App should quit without error
 
+@pytest.mark.skip("repo editing removed")
 @pytest.mark.asyncio
 async def test_config_persistence(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     app = PRManagerApp()
     async with app.run_test() as pilot:
@@ -118,4 +119,4 @@ async def test_config_persistence(tmp_path, monkeypatch):
     # Restart app and check config
     app2 = PRManagerApp()
     app2.load_config()
-    assert str(repo) in app2.repositories
+    assert app2.selected_repo == str(repo)

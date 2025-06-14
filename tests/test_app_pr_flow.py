@@ -20,7 +20,7 @@ async def test_pr_flow_success(tmp_path, monkeypatch):
     subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     monkeypatch.setattr(PRManagerApp, "CONFIG_PATH", conf, raising=False)
 
@@ -61,7 +61,7 @@ async def test_pr_flow_create_error(tmp_path, monkeypatch):
     subprocess.run(["git", "branch", "feature"], cwd=repo, check=True, capture_output=True)
 
     conf = tmp_path / "config.json"
-    conf.write_text(json.dumps({"repositories": [str(repo)]}))
+    conf.write_text(json.dumps({"selected_repository": str(repo)}))
     monkeypatch.setattr(main, "CONFIG_PATH", conf)
     monkeypatch.setattr(PRManagerApp, "CONFIG_PATH", conf, raising=False)
 
