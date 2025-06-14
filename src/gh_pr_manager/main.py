@@ -83,7 +83,8 @@ class BranchActions(Static):
     def on_button_pressed(self, event) -> None:
         branch = self.branch_getter()
         msg = self.query_one("#action_msg")
-        if not branch:
+        # Patch: handle NoSelection or None or non-string branch gracefully
+        if not branch or not isinstance(branch, str):
             msg.update("No branch selected.")
             return
 
