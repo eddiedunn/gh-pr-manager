@@ -1,9 +1,9 @@
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Union, Tuple
 
 
-def run_cmd(cmd: List[str], cwd: str | Path | None = None) -> tuple[bool, str]:
+def run_cmd(cmd: List[str], cwd: Union[str, Path, None] = None) -> Tuple[bool, str]:
     """Run a subprocess command and return success status and output."""
     try:
         result = subprocess.run(
