@@ -41,17 +41,34 @@ CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 class OrgSelector(Static):
     """Widget for choosing a GitHub organization or user account."""
-
     def __init__(self, on_select):
+        print("DEBUG: OrgSelector.__init__")
         super().__init__(id="org_selector")
         self.on_select = on_select
 
-    def compose(self) -> ComposeResult:
-        yield Static("Select an organization:")
-        yield Static("Loading organizations...", id="org_loading")
-        yield Button("Continue", id="org_continue")
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        print(f"DEBUG: OrgSelector.on_button_pressed called, button.id={getattr(event.button, 'id', None)}")
+        children = list(self.children)
+        print(f"DEBUG: OrgSelector children at button press: {[type(child).__name__ for child in children]}")
+        if event.button.id == "org_continue":
+            select = self.query_one("#org_select", expect_type=Select, default=None)
+            selected = select.value if select else None
+            print(f"DEBUG: OrgSelector.on_button_pressed - selected={selected}")
+            if selected and self.on_select:
 
-    def on_mount(self) -> None:
+    def compose(self) -> ComposeResult:
+        print("DEBUG: OrgSelector.compose")
+        yield Horizontal(
+            Select(
+                *[(org, org) for org in self.orgs],
+                id="org_select",
+                prompt="Select an owner..."
+            ) if len(self.orgs) > 1 else Static(f"Owner: {self.orgs[0]}", id="org_only"),
+            Button("Continue", id="org_continue")
+        )
+
+    async def on_mount(self) -> None:
+        print("DEBUG: OrgSelector.on_mount")
         login = (github_client.get_user_login() or "").strip()
         orgs = [org.strip() for org in github_client.get_user_orgs() if org.strip()]
         options = []
@@ -63,11 +80,11 @@ class OrgSelector(Static):
         from textual.widgets import Select
         if len(options) > 1:
             select = Select(options=options, id="org_select", allow_blank=False, prompt="Choose an owner...")
-            self.mount(select, before="#org_continue")
+            await self.mount(select, before="#org_continue")
         elif len(options) == 1:
-            self.mount(Static(f"Owner: {options[0][0]}", id="org_only"), before="#org_continue")
+            await self.mount(Static(f"Owner: {options[0][0]}", id="org_only"), before="#org_continue")
         else:
-            self.mount(Static("No owners found", id="org_none"), before="#org_continue")
+            await self.mount(Static("No owners found", id="org_none"), before="#org_continue")
         import logging
         logging.basicConfig(filename="org_selector_debug.log", level=logging.INFO, filemode="a")
         logging.info(f"DEBUG OrgSelector (final): login={login!r} orgs={orgs!r} options={options!r}")
@@ -102,11 +119,11 @@ class OrgSelector(Static):
 
 class RepoSelectionWidget(Static):
     """Widget for selecting a repository from the chosen owner."""
-
     def __init__(self, owner: str, on_select=None, **kwargs):
+        print(f"DEBUG: RepoSelectionWidget.__init__ for owner={owner}")
         super().__init__(**kwargs)
         self.owner = owner
-        self.on_select = on_select  # Store the callback for repository selection
+        self.on_select = on_select
         self.repos = []
         self.filtered_repos = []
         self.loading = True
@@ -114,96 +131,32 @@ class RepoSelectionWidget(Static):
         self._list_view = None  # Strong reference to the list view widget
 
     def compose(self) -> ComposeResult:
-        """Create child widgets for the repository selector."""
+        print("DEBUG: RepoSelectionWidget.compose")
         with Vertical():
             yield Static("DEBUG: UI reached here", id="debug_top")
             yield Static(f"Repositories for {self.owner}")
             yield Input(placeholder="Filter repositories...", id="repo_filter")
             yield Static("Loading repositories...", id="repo_loading")
-            with Container(id="repo_container"):
-                from . import github_client
-                repo_names = [r.name if hasattr(r, 'name') else str(r) for r in self.repos] if self.repos else []
-                yield Static("\n".join(repo_names) or "[debug] No repos loaded yet", id="repo_list_static")
-                yield Static("[debug] Repo list should appear above.", id="repo_debug_label")
+            yield ListView(id="repo_list")
 
-    def _try_find_list_view(self, attempt=0, max_retries=3):
-        """Try to find the list view with retry logic."""
+    async def on_mount(self) -> None:
+        print("DEBUG: RepoSelectionWidget.on_mount")
         try:
-            # Debug: Log the current widget tree
-            logging.info("Current widget tree in _try_find_list_view:")
-            self.log_widget_tree()
-            
-            # Try direct query first
-            list_view = self.query_one("#repo_list")
-            logging.info(f"Direct query result: {list_view}")
-            
-            # If not found, try getting the container first
-            if list_view is None:
-                container = self.query_one("#repo_container")
-                logging.info(f"Container query result: {container}")
-                if container:
-                    list_view = container.query_one("#repo_list")
-                    logging.info(f"Container list view query result: {list_view}")
-            
-            # If still not found, try direct children
-            if list_view is None:
-                logging.info("Searching through direct children...")
-                for child in self.query("*"):
-                    if hasattr(child, 'id') and child.id == "repo_list":
-                        list_view = child
-                        logging.info(f"Found list_view in direct children: {list_view}")
-                        break
-            
-            if list_view is not None:
-                logging.info(f"Found #repo_list: {list_view}")
-                self._list_view = list_view  # Store strong reference
-                self._finish_initialization()
-                return True
-                
-            if attempt >= max_retries - 1:
-                error_msg = f"Failed to find #repo_list after {max_retries} attempts"
-                logging.error(error_msg)
-                logging.info("Widget tree at time of failure:")
-                self.log_widget_tree()
-                self.notify(error_msg, severity="error")
-                return False
-                
-            logging.warning(f"Attempt {attempt + 1}: List view not found, retrying...")
-            
-            # Use a bound method for the callback with explicit args
-            def retry():
-                self._try_find_list_view(attempt + 1, max_retries)
-                
-            self.call_after_refresh(retry)
-            return True
-            
-        except Exception as e:
-            error_msg = f"Error in _try_find_list_view: {str(e)}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
-            self.notify(error_msg, severity="error")
-            return False
-
-    def on_mount(self) -> None:
-        """Initialize the widget after it's been mounted to the DOM."""
-        try:
-                
             logging.info(f"Mounting repo selector for owner: {self.owner}")
-            
-            # Start the retry process
-            self._try_find_list_view()
-            
+            # ... your code here ...
         except Exception as e:
-            error_msg = f"Error in on_mount: {str(e)}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
-            self.notify(error_msg, severity="error")
+            print(f"Error in RepoSelectionWidget.on_mount: {e}")
+            logging.error(f"Error in RepoSelectionWidget.on_mount: {e}")
                 
     def _finish_initialization(self):
         """Complete the initialization after the list view is found."""
         try:
             logging.info(f"List view initialized: {self._list_view}")
-            
+            # ... your code here ...
+        except Exception as e:
+            print(f"Error in _finish_initialization: {e}")
+            logging.error(f"Error in _finish_initialization: {e}")
+        
             # Set up event handlers
             filter_input = self.query_one("#repo_filter")
             if filter_input:
@@ -226,25 +179,22 @@ class RepoSelectionWidget(Static):
     
     async def _load_repositories(self) -> None:
         """Load repositories asynchronously."""
-        try:
-            logging.info(f"Loading repositories for: {self.owner}")
+        print(f"DEBUG: _load_repositories called for owner={self.owner}")
+        # Simulate async repo loading for now
+        import asyncio
+        from types import SimpleNamespace
+        await asyncio.sleep(0.1)
+        # Replace with real GitHub API call or gh CLI integration
+        self.repos = [SimpleNamespace(name=f"repo-{i}") for i in range(3)]
+        print(f"DEBUG: _load_repositories loaded repos: {[r.name for r in self.repos]}")
+        self.filtered_repos = list(self.repos)
+        self.update_list_view()
+        # Update the UI on the main thread
+        self.call_after_refresh(
+            self._on_repositories_loaded,
+            self.repos
+        )
             
-            # Fetch repositories
-            repos = github_client.get_repos(self.owner)
-            logging.info(f"Found {len(repos)} repositories for {self.owner}")
-            
-            # Update the UI on the main thread
-            self.call_after_refresh(
-                self._on_repositories_loaded,
-                repos
-            )
-            
-        except Exception as e:
-            error_msg = f"Failed to load repositories: {str(e)}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
-            self.notify(error_msg, severity="error")
-    
     def _update_repo_list(self, repos: list[str]) -> None:
         """Update the repository list in the UI."""
         try:
@@ -292,22 +242,10 @@ class RepoSelectionWidget(Static):
         term = event.value.lower()
         self.filtered_repos = [r for r in self.repos if term in r.name.lower()]
         self.update_list_view()
-        
-    def on_mount(self) -> None:
-        """Initialize the widget after it's been mounted to the DOM."""
-        try:
-            logging.info(f"Mounting repo selector for owner: {self.owner}")
-            # Start with a small delay to ensure the widget is fully mounted
-            self.call_after_refresh(lambda: self._try_find_list_view())
-        except Exception as e:
-            error_msg = f"Error in on_mount: {str(e)}"
-            logging.error(error_msg)
-            logging.error(traceback.format_exc())
-            self.notify(error_msg, severity="error")
-            
+
     def _on_repositories_loaded(self, repos):
         """Handle repositories loaded event.
-        
+
         Args:
             repos: List of repository objects or an exception if loading failed
         """
@@ -316,33 +254,33 @@ class RepoSelectionWidget(Static):
             logging.error(error_msg)
             self.notify(error_msg, severity="error")
             return
-            
+
         try:
             self.repos = repos
             self.filtered_repos = list(repos)  # Initialize filtered list
             logging.info(f"Found {len(repos)} repositories for {self.owner}")
-            
+
             # Ensure we have a valid list view reference
             if self._list_view is None:
                 logging.warning("List view reference lost, trying to find it...")
                 self._list_view = self.query_one("#repo_list")
-                
+
             if self._list_view is None:
                 logging.error("Could not find list view after repository load")
                 return
-                
+
             # Update the UI with the repositories
             self.call_after_refresh(self.update_list_view)
-            
+
         except Exception as e:
             error_msg = f"Error handling repositories: {str(e)}"
             logging.error(error_msg)
             logging.error(traceback.format_exc())
             self.notify(error_msg, severity="error")
-            
+
     def update_list_view(self, repos=None):
         """Update the list view with repositories.
-        
+
         Args:
             repos: Optional list of repositories to display. If None, uses self.filtered_repos
         """
@@ -562,6 +500,28 @@ class PRManagerApp(App):
         ("q", "quit", "Quit"),
         ("ctrl+c", "quit", "Quit"),  # Add Ctrl+C as an alternative quit shortcut
     ]
+
+    def compose(self) -> ComposeResult:
+        print("DEBUG: PRManagerApp.compose")
+        # MINIMAL TEST: Yield a simple widget to see if the app runs at all.
+        yield Static("HELLO WORLD. If you see this, the app's core is working.", id="hello")
+        # yield OrgSelector(self.on_org_selected)
+
+    def on_org_selected(self, org):
+        print(f"DEBUG: PRManagerApp.on_org_selected called with org={org}")
+        # Remove OrgSelector and show RepoSelectionWidget (minimal logic for now)
+        from textual.css.query import NoMatches
+        try:
+            org_selector = self.query_one("#org_selector", expect_type=OrgSelector)
+            print("DEBUG: Removing OrgSelector from app")
+            org_selector.remove()
+        except NoMatches:
+            print("DEBUG: OrgSelector not found in app")
+        # Show repo selection widget (real logic)
+        print(f"DEBUG: Mounting RepoSelectionWidget for org: {org}")
+        self.mount(RepoSelectionWidget(owner=org, on_select=self.on_repo_selected))
+        print("DEBUG: Mounted RepoSelectionWidget")
+
     
     def action_quit(self) -> None:
         """Handle the quit action."""
@@ -574,6 +534,7 @@ class PRManagerApp(App):
     def __init__(self):
         super().__init__()
         self.selected_repo = None
+        print("DEBUG: PRManagerApp.__init__")
 
     def load_config(self):
         if CONFIG_PATH.exists():
@@ -1289,4 +1250,6 @@ class PRManagerApp(App):
         container.mount(RepoSelectionWidget(self.selected_repo.split("/")[0], self.on_repo_selected))
 
 if __name__ == "__main__":
+    print("DEBUG: main.py starting up")
     PRManagerApp().run()
+    print("DEBUG: PRManagerApp has exited")
