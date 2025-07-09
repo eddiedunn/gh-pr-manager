@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 src/gh_pr_manager/__init__.py
 src/gh_pr_manager/__main__.py
+src/gh_pr_manager/github_client.py
 src/gh_pr_manager/main.py
 src/gh_pr_manager/utils.py
 src/gh_pr_manager.egg-info/PKG-INFO
@@ -10,6 +11,7 @@ src/gh_pr_manager.egg-info/dependency_links.txt
 src/gh_pr_manager.egg-info/entry_points.txt
 src/gh_pr_manager.egg-info/requires.txt
 src/gh_pr_manager.egg-info/top_level.txt
-tests/test_app_pr_flow.py
-tests/test_app_smoke.py
-tests/test_config_and_branch.py
+tests/test_branch_actions.py
+tests/test_github_client.py
+tests/test_repo_selection.py
+tests/test_ui_flow.py

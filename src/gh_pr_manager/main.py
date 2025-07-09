@@ -1,3 +1,4 @@
+# Add these imports at the top of src/gh_pr_manager/main.py
 import json
 import logging
 import re
@@ -38,84 +39,180 @@ class AuthScreen(Static):
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
+# Add this before the OrgSelector class definition
 
+class QuitButton(Button):
+    """A simple quit button."""
+    def __init__(self, **kwargs):
+        super().__init__("❌", **kwargs)
+    
+    def on_button_pressed(self) -> None:
+        self.app.exit()
+
+
+# Update the PRManagerApp class:
+class PRManagerApp(App):
+    CSS_PATH = "main.css"
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("ctrl+c", "quit", "Quit"),
+    ]
+
+    def __init__(self):
+        super().__init__()
+        self.selected_repo = None
+        print("DEBUG: PRManagerApp.__init__")
+
+    def compose(self) -> ComposeResult:
+        print("DEBUG: PRManagerApp.compose")
+        
+        # Check if authenticated
+        if not github_client.check_auth_status():
+            yield Container(
+                Static("⚠️  GitHub CLI is not authenticated!", classes="error"),
+                Static("Please run 'gh auth login' in your terminal and restart the app."),
+                Button("Exit", id="exit_button"),
+                id="auth_error"
+            )
+        else:
+            yield OrgSelector(self.on_org_selected)
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "exit_button":
+            self.exit()
+
+    def on_org_selected(self, org):
+        print(f"DEBUG: PRManagerApp.on_org_selected called with org={org}")
+        # Save the selected organization
+        self.selected_org = org
+        
+        # Remove the organization selector
+        org_selector = self.query_one("#org_selector")
+        if org_selector:
+            org_selector.remove()
+        
+        # Add the repository selection widget
+        self.mount(RepoSelectionWidget(owner=org, on_select=self.on_repo_selected))
+        
 class OrgSelector(Static):
     """Widget for choosing a GitHub organization or user account."""
+    
     def __init__(self, on_select):
         print("DEBUG: OrgSelector.__init__")
         super().__init__(id="org_selector")
         self.on_select = on_select
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        print(f"DEBUG: OrgSelector.on_button_pressed called, button.id={getattr(event.button, 'id', None)}")
-        children = list(self.children)
-        print(f"DEBUG: OrgSelector children at button press: {[type(child).__name__ for child in children]}")
-        if event.button.id == "org_continue":
-            select = self.query_one("#org_select", expect_type=Select, default=None)
-            selected = select.value if select else None
-            print(f"DEBUG: OrgSelector.on_button_pressed - selected={selected}")
-            if selected and self.on_select:
-
+        self.orgs = []  # Initialize empty list
+        self.login = ""
+        self.options = []
+        
     def compose(self) -> ComposeResult:
         print("DEBUG: OrgSelector.compose")
-        yield Horizontal(
-            Select(
-                *[(org, org) for org in self.orgs],
-                id="org_select",
-                prompt="Select an owner..."
-            ) if len(self.orgs) > 1 else Static(f"Owner: {self.orgs[0]}", id="org_only"),
-            Button("Continue", id="org_continue")
-        )
-
+        # Start with a loading message
+        with Container(id="org_container"):
+            yield Static("Loading organizations...", id="org_loading")
+            yield Button("Continue", id="org_continue", disabled=True)
+    
     async def on_mount(self) -> None:
         print("DEBUG: OrgSelector.on_mount")
-        login = (github_client.get_user_login() or "").strip()
-        orgs = [org.strip() for org in github_client.get_user_orgs() if org.strip()]
-        options = []
-        if login:
-            options.append((login, login))
-        options.extend((org, org) for org in orgs)
-        loading = self.query_one("#org_loading")
-        loading.remove()
-        from textual.widgets import Select
-        if len(options) > 1:
-            select = Select(options=options, id="org_select", allow_blank=False, prompt="Choose an owner...")
-            await self.mount(select, before="#org_continue")
-        elif len(options) == 1:
-            await self.mount(Static(f"Owner: {options[0][0]}", id="org_only"), before="#org_continue")
+        try:
+            # Fetch user login and organizations
+            self.login = (github_client.get_user_login() or "").strip()
+            orgs = [org.strip() for org in github_client.get_user_orgs() if org.strip()]
+            
+            # Build options list
+            self.options = []
+            if self.login:
+                self.options.append((self.login, self.login))
+            self.options.extend((org, org) for org in orgs)
+            
+            # Log for debugging
+            print(f"DEBUG: Found {len(self.options)} organizations")
+            
+            # Update UI
+            await self._update_ui()
+            
+        except Exception as e:
+            print(f"Error in OrgSelector.on_mount: {e}")
+            import traceback
+            traceback.print_exc()
+            # Show error in UI
+            container = self.query_one("#org_container")
+            container.remove_children()
+            await container.mount(
+                Static(f"Error loading organizations: {str(e)}", classes="error"),
+                Button("Quit", id="quit_button")
+            )
+    
+    async def _update_ui(self):
+        """Update the UI with the fetched organizations."""
+        container = self.query_one("#org_container")
+        
+        # Clear all children except the loading message
+        children_to_remove = []
+        for child in container.children:
+            if child.id != "org_loading":
+                children_to_remove.append(child)
+        
+        for child in children_to_remove:
+            await child.remove()
+        
+        if not self.options:
+            # No organizations found
+            await container.mount(
+                Static("No organizations found. Please check your GitHub authentication.", classes="error"),
+                Button("Quit", id="quit_button")
+            )
+        elif len(self.options) == 1:
+            # Single organization
+            self.selected_owner = self.options[0][0]
+            await container.mount(
+                Static(f"Owner: {self.options[0][0]}", id="org_only"),
+                Button("Continue", id="org_continue")
+            )
         else:
-            await self.mount(Static("No owners found", id="org_none"), before="#org_continue")
-        import logging
-        logging.basicConfig(filename="org_selector_debug.log", level=logging.INFO, filemode="a")
-        logging.info(f"DEBUG OrgSelector (final): login={login!r} orgs={orgs!r} options={options!r}")
-
-
-
-    def on_button_pressed(self, event) -> None:
-        import logging
-        logging.basicConfig(filename="org_selector_debug.log", level=logging.INFO, filemode="a")
+            # Multiple organizations - show list
+            list_view = ListView(
+                *[ListItem(Label(option[0])) for option in self.options],
+                id="org_list"
+            )
+            await container.mount(
+                Static("Select an organization:", classes="label"),
+                list_view,
+                Button("Select", id="org_continue")
+            )
+    
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events."""
+        print(f"DEBUG: OrgSelector.on_button_pressed called, button.id={event.button.id}")
+        
+        if event.button.id == "quit_button":
+            self.app.exit()
+            return
+            
         if event.button.id == "org_continue":
             owner = None
-            try:
-                select = self.query_one("#org_select")
-                owner = select.value
-            except Exception:
-                try:
-                    static_owner = self.query_one("#org_only")
-                    # Try to extract text robustly
-                    try:
-                        text = static_owner.renderable.text
-                    except AttributeError:
-                        text = str(static_owner.renderable)
-                    owner = text.replace("Owner: ", "").strip()
-                except Exception:
-                    pass
-            logging.info(f"DEBUG on_button_pressed: owner={owner!r}")
-            if owner:
-                self.on_select(owner)
+            
+            # Try to get selected owner
+            if len(self.options) == 1:
+                # Single owner case
+                owner = self.options[0][0]
             else:
-                logging.info("DEBUG on_button_pressed: No owner selected!")
-
+                # Multiple orgs case - try to get selection from ListView
+                try:
+                    list_view = self.query_one("#org_list", ListView)
+                    if list_view.index is not None and 0 <= list_view.index < len(self.options):
+                        owner = self.options[list_view.index][0]
+                except NoMatches:
+                    pass
+            
+            print(f"DEBUG: Selected owner: {owner}")
+            
+            if owner and self.on_select:
+                # Call the callback
+                result = self.on_select(owner)
+                # If the callback is a coroutine, await it
+                if hasattr(result, "__await__"):
+                    await result
 
 class RepoSelectionWidget(Static):
     """Widget for selecting a repository from the chosen owner."""
@@ -494,32 +591,7 @@ class BaseContainer(Container):
                 yield Static()  # Placeholder for actual content
 
 
-class PRManagerApp(App):
-    CSS_PATH = "main.css"
-    BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("ctrl+c", "quit", "Quit"),  # Add Ctrl+C as an alternative quit shortcut
-    ]
 
-    def compose(self) -> ComposeResult:
-        print("DEBUG: PRManagerApp.compose")
-        # MINIMAL TEST: Yield a simple widget to see if the app runs at all.
-        yield Static("HELLO WORLD. If you see this, the app's core is working.", id="hello")
-        # yield OrgSelector(self.on_org_selected)
-
-    def on_org_selected(self, org):
-        print(f"DEBUG: PRManagerApp.on_org_selected called with org={org}")
-        # Remove OrgSelector and show RepoSelectionWidget (minimal logic for now)
-        from textual.css.query import NoMatches
-        try:
-            org_selector = self.query_one("#org_selector", expect_type=OrgSelector)
-            print("DEBUG: Removing OrgSelector from app")
-            org_selector.remove()
-        except NoMatches:
-            print("DEBUG: OrgSelector not found in app")
-        # Show repo selection widget (real logic)
-        print(f"DEBUG: Mounting RepoSelectionWidget for org: {org}")
-        self.mount(RepoSelectionWidget(owner=org, on_select=self.on_repo_selected))
         print("DEBUG: Mounted RepoSelectionWidget")
 
     
